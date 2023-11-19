@@ -233,6 +233,7 @@ impl VfsNodeOps for DirWrapper<'static> {
             src_path, dst_path
         );
 
+        let dst_path = dst_path.trim_matches('/');
         self.0
             .rename(src_path, &self.0, dst_path)
             .map_err(as_vfs_err)

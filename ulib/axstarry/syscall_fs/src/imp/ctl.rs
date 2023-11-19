@@ -139,15 +139,30 @@ pub fn syscall_getdents64(fd: usize, buf: *mut u8, len: usize) -> SyscallResult 
         return Err(SyscallError::EFAULT);
     }
 
-    let entry_id_from = unsafe { (*(buf as *const DirEnt)).d_off };
-    if entry_id_from == -1 {
-        // 说明已经读完了
-        return Ok(0);
+    if len < DirEnt::fixed_size() {
+        return Err(SyscallError::EINVAL);
     }
-
+    // let entry_id_from = unsafe { (*(buf as *const DirEnt)).d_off };
+    // error!("entry_id_from: {}", entry_id_from);
+    // 先获取buffer里面最后一个长度
+    let mut all_offset = 0; // 记录上一次调用时进行到的目录项距离文件夹开始时的偏移量
+    let mut buf_offset = 0; // 记录当前buf里面的目录项的指针偏移量
+    loop {
+        let dir_ent = unsafe { *(buf.add(buf_offset) as *const DirEnt) };
+        if dir_ent.d_reclen == 0 || dir_ent.d_off == u64::MAX {
+            break;
+        }
+        buf_offset += dir_ent.d_reclen as usize;
+        all_offset = dir_ent.d_off; // 记录最新的 offset
+        if buf_offset + DirEnt::fixed_size() >= len {
+            break;
+        }
+    }
     let buf = unsafe { core::slice::from_raw_parts_mut(buf, len) };
     let dir_iter = axfs::api::read_dir(path.path()).unwrap();
     let mut count = 0; // buf中已经写入的字节数
+
+    let mut offset: u64 = 0; // 当前目录项在文件夹中的偏移
 
     for (_, entry) in dir_iter.enumerate() {
         let entry = entry.unwrap();
@@ -158,20 +173,33 @@ pub fn syscall_getdents64(fd: usize, buf: *mut u8, len: usize) -> SyscallResult 
         let file_type = entry.file_type();
         let entry_size = DirEnt::fixed_size() + name_len + 1;
 
-        // buf不够大，写不下新的entry
-        if count + entry_size > len {
+        // 最后一项给一个 off = -1, reclen = 0 的空文件，
+        // 方便下次 getdents64 调用时内核检查上次读到哪了
+        // 需要最后留够 empty_entry_size 的空间给它
+        let empty_entry_size = DirEnt::fixed_size() + 1;
+        // buf不够大，不能再装这个 entry 了
+        if count + entry_size + empty_entry_size > len {
             debug!("buf not big enough");
+            // 装最后一个空 entry，它是下次调用时给内核看的，不在 count 里
+            let dirent: &mut DirEnt = unsafe { transmute(buf.as_mut_ptr().offset(count as isize)) };
+            dirent.set_fixed_part(1, u64::MAX, 0, DirEntType::UNKNOWN);
             return Ok(count as isize);
         }
+        offset += entry_size as u64;
+        // 如果当前这一项已经被输出过了，就继续找下一项
+        if offset <= all_offset as u64 {
+            continue;
+        }
+
         // 转换为DirEnt
         let dirent: &mut DirEnt = unsafe { transmute(buf.as_mut_ptr().offset(count as isize)) };
         // 设置定长部分
         if file_type.is_dir() {
-            dirent.set_fixed_part(1, entry_size as i64, entry_size, DirEntType::DIR);
+            dirent.set_fixed_part(1, offset, entry_size, DirEntType::DIR);
         } else if file_type.is_file() {
-            dirent.set_fixed_part(1, entry_size as i64, entry_size, DirEntType::REG);
+            dirent.set_fixed_part(1, offset, entry_size, DirEntType::REG);
         } else {
-            dirent.set_fixed_part(1, entry_size as i64, entry_size, DirEntType::UNKNOWN);
+            dirent.set_fixed_part(1, offset, entry_size, DirEntType::UNKNOWN);
         }
 
         // 写入文件名
@@ -182,76 +210,53 @@ pub fn syscall_getdents64(fd: usize, buf: *mut u8, len: usize) -> SyscallResult 
     Ok(count as isize)
 }
 
+// LAB3 你可能用到的函数
+use axfs::api::{path_exists, metadata, remove_dir, remove_file, rename};
+// LAB3 你可能用到的标志位。
+// 它们其实应该放在 ulib/axstarry/syscall_utils/src/ctypes.rs 更合理，但为了方便实验就堆在这了
+use bitflags::bitflags;
+bitflags! {
+    /// sys_renameat2 用到的标志位
+    pub struct RenameFlags: u32 {
+        const NONE = 0;
+        // LAB3 其他可能的选项都有什么？
+    }
+}
+
 /// 276
 /// 重命名文件或目录
-// todo!
-// 1. 权限检查
-// 调用进程必须对源目录和目标目录都有写权限,才能完成重命名。
-// 2. 目录和文件在同一个文件系统
-// 如果目录和文件不在同一个文件系统,重命名会失败。renameat2不能跨文件系统重命名。
-// 3. 源文件不是目标目录的子目录
-// 如果源文件是目标目录的子孙目录,也会导致重命名失败。不能将目录重命名到自己的子目录中。
-// 4. 目标名称不存在
-// 目标文件名在目标目录下必须不存在,否则会失败。
-// 5. 源文件被打开
-// 如果源文件正被进程打开,默认情况下重命名也会失败。可以通过添加RENAME_EXCHANGE标志位实现原子交换。
-// 6. 目录不是挂载点
-// 如果源目录是一个挂载点,也不允许重命名。
+// LAB3 你需要完成这个 syscall
 pub fn syscall_renameat2(
     old_dirfd: usize,
-    _old_path: *const u8,
+    old_path: *const u8,
     new_dirfd: usize,
-    _new_path: *const u8,
+    new_path: *const u8,
     flags: usize,
 ) -> SyscallResult {
-    let old_path = deal_with_path(old_dirfd, Some(_old_path), false).unwrap();
-    let new_path = deal_with_path(new_dirfd, Some(_new_path), false).unwrap();
-
+    let old_path = deal_with_path(old_dirfd, Some(old_path), false).unwrap();
+    let new_path = deal_with_path(new_dirfd, Some(new_path), false).unwrap();
     let proc_path = FilePath::new("/proc").unwrap();
     if old_path.start_with(&proc_path) || new_path.start_with(&proc_path) {
         return Err(SyscallError::EPERM);
     }
-
-    // 交换两个目录名，目录下的文件不受影响，
-
-    // 如果重命名后的文件已存在
-    if flags == 1 {
-        // 即RENAME_NOREPLACE
-        if axfs::api::path_exists(new_path.path()) {
-            debug!("new_path_ already exist");
-            return Err(SyscallError::EPERM);
-        }
-    }
-
-    // 文件与文件夹不能互换命名
-    if flags == 2 {
-        // 即RENAME_EXCHANGE
-        let old_metadata = axfs::api::metadata(old_path.path()).unwrap();
-        let new_metadata = axfs::api::metadata(new_path.path()).unwrap();
-        if old_metadata.is_dir() != new_metadata.is_dir() {
-            debug!("old_path_ and new_path_ is not the same type");
-            return Err(SyscallError::EPERM);
-        }
-    }
-
-    if flags == 4 {
-        // 即RENAME_WHITEOUT
-        let new_metadata = axfs::api::metadata(new_path.path()).unwrap();
-        if new_metadata.is_dir() {
-            debug!("new_path_ is a directory");
-            return Err(SyscallError::EPERM);
-        }
-    }
-
-    if flags != 1 && flags != 2 && flags != 4 {
-        debug!("flags is not valid");
-        return Err(SyscallError::EPERM);
-    }
-
-    // 做实际重命名操作
-    axlog::warn!("renameat2 not implemented");
-    Ok(0)
+    // LAB3 从此处往上的代码不需要修改
+    //
+    // HINT 1
+    // path_exists, metadata, remove_dir, remove_file, rename 函数的输入参数都是 &str，
+    // 你可以通过 old_path.path() new_path.path() 获取它俩的 &str 形式。
+    //
+    // HINT 2
+    // RenameFlags 是一个 bitflags，它常用的函数有 .contains(...) 和 ::from_bits(...)
+    // 可以找找内核中其他地方是怎么使用 bitflags 的，比如这个文件中的 syscall_fcntl64
+    //
+    // HINT 3
+    // metadata(old_path.path()) 会返回一个 Result<Metadata>
+    // 如果它是 Err()，说明文件打开失败，你可以用它检查文件是否存在；
+    // 如果它是 Ok()，则可以获取到一个 Metadata 类。
+    // 这个类里 .is_dir() 和 .is_file() 可以帮助你判断它是路径还是文件
+    return Err(SyscallError::EPERM);
 }
+
 
 pub fn syscall_fcntl64(fd: usize, cmd: usize, arg: usize) -> SyscallResult {
     let process = current_process();
