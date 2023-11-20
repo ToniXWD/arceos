@@ -9,3 +9,7 @@ rusty-tags.vi
 /testcases/riscv64-linux-musl-native.tgz
 /testcases/gcc/riscv64-linux-musl-native
 /testcases/temp
+/testcases/mytest
+/testcases/sdcard
+/testcases/tem_3_1
+/output_cmp

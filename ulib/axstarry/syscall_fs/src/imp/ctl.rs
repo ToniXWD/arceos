@@ -285,6 +285,9 @@ pub fn syscall_renameat2(
         return Err(SyscallError::EEXIST);
     }
 
+    // error!("old path = {}", old_path_str);
+    // error!("new path = {}", new_path_str);
+
     let res = axfs::api::rename(old_path_str, new_path_str);
 
     match res {

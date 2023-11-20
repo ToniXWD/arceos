@@ -327,6 +327,13 @@ pub const LAB3_1_TESTCASES: &[&str] = &[
 ];
 
 #[allow(dead_code)]
+pub const LAB3_2_TESTCASES: &[&str] = &[
+    "busybox touch def",
+    "busybox mv def bin",
+    "busybox ls bin/def",
+];
+
+#[allow(dead_code)]
 pub const SDCARD_TESTCASES: &[&str] = &[
     // "main",
     // "./riscv64-linux-musl-native/bin/riscv64-linux-musl-gcc ./hello.c -static",
@@ -630,6 +637,7 @@ pub fn run_testcases(case: &'static str) {
         "mytest" => (Box::new(MYTEST_TESTCASES.iter()), MYTEST_TESTCASES.len()),
         "busybox" => (Box::new(BUSYBOX_TESTCASES.iter()), BUSYBOX_TESTCASES.len()),
         "lab3_1" => (Box::new(LAB3_1_TESTCASES.iter()), LAB3_1_TESTCASES.len()),
+        "lab3_2" => (Box::new(LAB3_2_TESTCASES.iter()), LAB3_2_TESTCASES.len()),
         _ => {
             panic!("unknown test case: {}", case);
         }

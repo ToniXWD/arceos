@@ -1,7 +1,7 @@
 extern crate alloc;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use axfs::api::{lookup, path_exists, FileIO, Kstat, OpenFlags};
+use axfs::api::{lookup, metadata, path_exists, FileIO, Kstat, OpenFlags};
 use axlog::{debug, info};
 use axprocess::link::FilePath;
 use axsync::Mutex;
@@ -151,7 +151,17 @@ pub fn get_stat_in_fs(path: &FilePath) -> Result<Kstat, SyscallError> {
             }
         }
     }
-    if !real_path.ends_with("/") && !real_path.ends_with("include") {
+
+    let mut is_file = false;
+
+    let meta_data = metadata(real_path);
+    if meta_data.is_ok() {
+        is_file = meta_data.unwrap().is_file();
+    } else {
+        return Err(SyscallError::ENOENT);
+    }
+
+    if is_file {
         // 是文件
         return if let Ok(file) = new_fd(real_path.to_string(), 0.into()) {
             match file.get_stat() {
