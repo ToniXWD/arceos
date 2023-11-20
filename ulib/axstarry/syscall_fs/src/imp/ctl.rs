@@ -211,7 +211,7 @@ pub fn syscall_getdents64(fd: usize, buf: *mut u8, len: usize) -> SyscallResult 
 }
 
 // LAB3 你可能用到的函数
-use axfs::api::{path_exists, metadata, remove_dir, remove_file, rename};
+use axfs::api::{metadata, path_exists, remove_dir, remove_file, rename};
 // LAB3 你可能用到的标志位。
 // 它们其实应该放在 ulib/axstarry/syscall_utils/src/ctypes.rs 更合理，但为了方便实验就堆在这了
 use bitflags::bitflags;
@@ -220,6 +220,10 @@ bitflags! {
     pub struct RenameFlags: u32 {
         const NONE = 0;
         // LAB3 其他可能的选项都有什么？
+        // 参考: https://man7.org/linux/man-pages/man2/renameat2.2.html
+        const RENAME_EXCHANGE = 1; // 原子交换旧路径和新路径。两个路径名必须存在
+        const RENAME_NOREPLACE = 2; // 如果newpath已经存在, 不要覆盖重命名的新路径。
+        const RENAME_WHITEOUT  = 4; // 仅适用于覆盖/并集文件系统实现
     }
 }
 
@@ -239,6 +243,7 @@ pub fn syscall_renameat2(
     if old_path.start_with(&proc_path) || new_path.start_with(&proc_path) {
         return Err(SyscallError::EPERM);
     }
+
     // LAB3 从此处往上的代码不需要修改
     //
     // HINT 1
@@ -254,9 +259,41 @@ pub fn syscall_renameat2(
     // 如果它是 Err()，说明文件打开失败，你可以用它检查文件是否存在；
     // 如果它是 Ok()，则可以获取到一个 Metadata 类。
     // 这个类里 .is_dir() 和 .is_file() 可以帮助你判断它是路径还是文件
-    return Err(SyscallError::EPERM);
-}
+    let old_path_str = old_path.path();
+    let new_path_str = new_path.path();
 
+    let mut replace = true;
+
+    if let Some(flag) = RenameFlags::from_bits(flags.try_into().unwrap()) {
+        if flag.contains(RenameFlags::RENAME_EXCHANGE) {
+            panic!("not supported!");
+        }
+        if flag.contains(RenameFlags::RENAME_NOREPLACE) {
+            replace = false;
+        }
+        if flag.contains(RenameFlags::RENAME_WHITEOUT) {
+            panic!("not supported!");
+        }
+    }
+    if !path_exists(old_path_str) {
+        error!("old path not exists:{}", old_path_str);
+        return Err(SyscallError::ENOENT);
+    }
+
+    if !replace && path_exists(new_path_str) {
+        error!("new path exists:{}", new_path_str);
+        return Err(SyscallError::EEXIST);
+    }
+
+    let res = axfs::api::rename(old_path_str, new_path_str);
+
+    match res {
+        Ok(()) => Ok(0),
+        Err(e) => Err(e.into()),
+    }
+
+    // return Err(SyscallError::EPERM);
+}
 
 pub fn syscall_fcntl64(fd: usize, cmd: usize, arg: usize) -> SyscallResult {
     let process = current_process();

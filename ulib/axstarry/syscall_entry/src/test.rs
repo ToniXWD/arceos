@@ -320,6 +320,13 @@ pub const MYTEST_TESTCASES:&[&str] = &[
 ];
 
 #[allow(dead_code)]
+pub const LAB3_1_TESTCASES: &[&str] = &[
+    "busybox touch abc",
+    "busybox mv abc bin/",
+    "busybox ls bin/abc",
+];
+
+#[allow(dead_code)]
 pub const SDCARD_TESTCASES: &[&str] = &[
     // "main",
     // "./riscv64-linux-musl-native/bin/riscv64-linux-musl-gcc ./hello.c -static",
@@ -393,6 +400,7 @@ pub const IPERF_TESTCASES: &[&str] = &[
     "iperf3 -c 127.0.0.1 -p 5001 -t 2 -i 0 -R", // reverse tcp
     "iperf3 -c 127.0.0.1 -p 5001 -t 2 -i 0 -u -R -b 1000G", // reverse udp
 ];
+
 /// 运行测试时的状态机，记录测试结果与内容
 struct TestResult {
     sum: usize,
@@ -621,6 +629,7 @@ pub fn run_testcases(case: &'static str) {
         "ostrain" => (Box::new(OSTRAIN_TESTCASES.iter()), OSTRAIN_TESTCASES.len()),
         "mytest" => (Box::new(MYTEST_TESTCASES.iter()), MYTEST_TESTCASES.len()),
         "busybox" => (Box::new(BUSYBOX_TESTCASES.iter()), BUSYBOX_TESTCASES.len()),
+        "lab3_1" => (Box::new(LAB3_1_TESTCASES.iter()), LAB3_1_TESTCASES.len()),
         _ => {
             panic!("unknown test case: {}", case);
         }
