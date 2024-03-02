@@ -46,16 +46,23 @@
 //!
 //! [ArceOS]: https://github.com/rcore-os/arceos
 
+#![feature(doc_auto_cfg)]
 #![cfg_attr(all(not(test), not(doc)), no_std)]
 #![feature(doc_cfg)]
-#![feature(doc_auto_cfg)]
+// #![feature(hashmap_internals)]
+#![feature(extend_one)]
+#![feature(hasher_prefixfree_extras)]
+#![feature(error_in_core)]
+#![feature(try_reserve_kind)]
+#![feature(thread_local)]
+#![feature(const_hash)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
 #[cfg(feature = "alloc")]
 #[doc(no_inline)]
-pub use alloc::{boxed, collections, format, string, vec};
+pub use alloc::{boxed, format, string, vec};
 
 #[doc(no_inline)]
 pub use core::{arch, cell, cmp, hint, marker, mem, ops, ptr, slice, str};
@@ -70,6 +77,7 @@ pub mod process;
 pub mod sync;
 pub mod thread;
 pub mod time;
+pub mod collections;
 
 #[cfg(feature = "fs")]
 pub mod fs;

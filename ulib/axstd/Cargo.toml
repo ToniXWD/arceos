@@ -35,6 +35,7 @@ alloc-slab = ["axfeat/alloc-slab"]
 alloc-buddy = ["axfeat/alloc-buddy"]
 paging = ["axfeat/paging"]
 tls = ["axfeat/tls"]
+alloc-new = ["axfeat/alloc-new"]
 
 # Multi-threading and scheduler
 multitask = ["arceos_api/multitask", "axfeat/multitask"]

@@ -10,6 +10,7 @@
 
 #![no_std]
 #![cfg_attr(feature = "allocator_api", feature(allocator_api))]
+#![feature(const_mut_refs)]
 
 #[cfg(feature = "bitmap")]
 mod bitmap;
@@ -30,6 +31,11 @@ pub use slab::SlabByteAllocator;
 mod tlsf;
 #[cfg(feature = "tlsf")]
 pub use tlsf::TlsfByteAllocator;
+
+#[cfg(feature = "new")]
+mod list_alloc;
+#[cfg(feature = "new")]
+pub use list_alloc::LinkedListAllocator;
 
 use core::alloc::Layout;
 use core::ptr::NonNull;
